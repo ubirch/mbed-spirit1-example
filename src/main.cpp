@@ -1,3 +1,5 @@
+#include <stdint.h>
+#include <Inc/SPIRIT_Radio.h>
 #include "mbed.h"
 
 // hardware ssel (where applicable)
@@ -50,13 +52,15 @@ extern "C" {
 void SpiritBaseConfiguration(void);
 void SpiritVcoCalibration(void);
 
-uint16_t SpiritSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer) {
-    uint16_t status;
+StatusBytes RadioSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer) {
+    static uint16_t tmpstatus;
+
+    StatusBytes* status=(StatusBytes*)&tmpstatus;
 
     spirit1.lock();
     spirit1ChipSelect = 0;
 
-    status = (uint16_t) (spirit1.write(WRITE_HEADER) << 8 | spirit1.write(address));
+    tmpstatus = (uint16_t) (spirit1.write(WRITE_HEADER) << 8 | spirit1.write(address));
 
 //    printf("WRTE %04x=%x (%d)\r\n", address, status, n_regs);
     uint8_t response[n_regs];
@@ -66,16 +70,17 @@ uint16_t SpiritSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffe
     spirit1ChipSelect = 1;
     spirit1.unlock();
 
-    return status;
+    return *status;
 }
 
-uint16_t SpiritSpiReadRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer) {
-    uint16_t status;
+StatusBytes RadioSpiReadRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer) {
+    static uint16_t tmpstatus;
 
+    StatusBytes* status=(StatusBytes*)&tmpstatus;
     spirit1.lock();
     spirit1ChipSelect = 0;
 
-    status = (uint16_t) (spirit1.write(READ_HEADER) << 8 | spirit1.write(address));
+    tmpstatus = (uint16_t) (spirit1.write(READ_HEADER) << 8 | spirit1.write(address));
 
 //    printf("READ %04x=%x (%d)\r\n", address, status, n_regs);
     for (int i = 0; i < n_regs; i++) buffer[i] = (uint8_t) spirit1.write(0);
@@ -84,27 +89,89 @@ uint16_t SpiritSpiReadRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer
     spirit1ChipSelect = 1;
     spirit1.unlock();
 
-    return status;
+    return *status;
 
 }
 
-uint16_t SpiritSpiCommandStrobes(uint8_t cmd_code) {
-    uint16_t status;
+StatusBytes RadioSpiCommandStrobes(uint8_t cmd_code) {
+    static uint16_t tmpstatus;
+
+    StatusBytes* status=(StatusBytes*)&tmpstatus;
+
     spirit1.lock();
     spirit1ChipSelect = 0;
 
-    status = (uint16_t) (spirit1.write(COMMAND_HEADER) << 8 | spirit1.write(cmd_code));
+    tmpstatus = (uint16_t) (spirit1.write(COMMAND_HEADER) << 8 | spirit1.write(cmd_code));
 
     spirit1ChipSelect = 1;
     spirit1.unlock();
 
-    return status;
-}
+    return *status;
 }
 
+StatusBytes RadioSpiWriteFifo(uint8_t n_regs, uint8_t* buffer){
+
+    static uint16_t tmpstatus;
+
+    StatusBytes* status=(StatusBytes*)&tmpstatus;
+
+    spirit1.lock();
+    spirit1ChipSelect = 0;
+
+    tmpstatus = (uint16_t) (spirit1.write(WRITE_HEADER) << 8 | spirit1.write(LINEAR_FIFO_ADDRESS));
+
+//    printf("WRTE %04x=%x (%d)\r\n", address, status, n_regs);
+    uint8_t response[n_regs];
+    for (int i = 0; i < n_regs; i++) response[i] = (uint8_t) spirit1.write(buffer[i]);
+//    dbg_dump("WRTE", response, n_regs);
+
+    spirit1ChipSelect = 1;
+    spirit1.unlock();
+
+    return *status;
+}
+
+StatusBytes RadioSpiReadFifo(uint8_t n_regs, uint8_t* buffer){
+    static uint16_t tmpstatus;
+
+    StatusBytes* status=(StatusBytes*)&tmpstatus;
+
+    spirit1.lock();
+    spirit1ChipSelect = 0;
+
+    tmpstatus = (uint16_t) (spirit1.write(READ_HEADER) << 8 | spirit1.write(LINEAR_FIFO_ADDRESS));
+
+    printf("READ %04x=%x (%d)\r\n", LINEAR_FIFO_ADDRESS, status, n_regs);
+    for (int i = 0; i < n_regs; i++) buffer[i] = (uint8_t) spirit1.write(0);
+    dbg_dump("READ", buffer, n_regs);
+
+    spirit1ChipSelect = 1;
+    spirit1.unlock();
+
+    return *status;
+}
+
+void SP1_Enter_Pers_RX_mode(void)
+{
+   SpiritRadioPersistenRx(S_ENABLE);
+   SpiritCmdStrobeRx();
+}
+
+DigitalOut    led1(LED1);
+
+void led_thread(void const *args) {
+    while (true) {
+        led1 = !led1;
+        Thread::wait(1000);
+    }
+}
+
+osThreadDef(led_thread,   osPriorityNormal, DEFAULT_STACK_SIZE);
 
 int main() {
-    printf("SPIRIT1 example\r\n");
+    osThreadCreate(osThread(led_thread), NULL);
+
+    printf("SPIRIT1 read from trackle\r\n");
     // set the
     spirit1.format(8);
 
@@ -113,19 +180,43 @@ int main() {
 
     // read all registers and dump them
     uint8_t regs[0xf2];
-    SpiritSpiReadRegisters(0x00, 0xf2,regs);
+    SpiritSpiReadRegisters(0x00, 0xf2, regs);
     dbg_dump("RESET", regs, 0xf2);
 
     // configure the module
     SpiritBaseConfiguration();
 
     // read all registers again to check they are correct
-    SpiritSpiReadRegisters(0x00, 0xf2,regs);
+    SpiritSpiReadRegisters(0x00, 0xf2, regs);
     dbg_dump("CONFI", regs, 0xf2);
 
     wait(1);
 
-    uint32_t runBootloaderAddress = **(uint32_t **) (0x1c00001c);
-    ((void (*)(void *arg)) runBootloaderAddress)(NULL);
+    uint8_t buffer[96];
+
+printf("now persistent mode \n");
+//    SpiritTimerSetRxTimeoutMs();
+//    SP1_Enter_Pers_RX_mode();
+
+    SET_INFINITE_RX_TIMEOUT();
+
+    SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
+
+
+//    SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
+
+
+    while (1) {
+        SpiritCmdStrobeRx();
+
+        SpiritSpiReadLinearFifo(96, buffer);
+        led1 = !led1;
+        Thread::wait(2000);
+    }
+//    uint32_t runBootloaderAddress = **(uint32_t **) (0x1c00001c);
+//    ((void (*)(void *arg)) runBootloaderAddress)(NULL);
+}
 }
 
+//TODO put the device into ready state and red in blocking / non blocking mode
+//
