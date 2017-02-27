@@ -7,6 +7,10 @@ SPI spirit1(PTB22, PTB23, PTB21); // mosi, miso, sclk, ssel
 DigitalOut spirit1ChipSelect(PTB20);
 DigitalOut spirit1Shutdown(PTA18);
 
+DigitalOut    led1(LED1);
+
+//PTC7 == GPIO1 -- SPIRIT i/o 1
+
 void dbg_dump(const char *prefix, const uint8_t *b, size_t size) {
     for (int i = 0; i < size; i += 16) {
         if (prefix && strlen(prefix) > 0) printf("%s %06x: ", prefix, i);
@@ -55,7 +59,7 @@ void SpiritVcoCalibration(void);
 StatusBytes RadioSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer) {
     static uint16_t tmpstatus;
 
-    StatusBytes* status=(StatusBytes*)&tmpstatus;
+    StatusBytes *status = (StatusBytes *) &tmpstatus;
 
     spirit1.lock();
     spirit1ChipSelect = 0;
@@ -76,7 +80,7 @@ StatusBytes RadioSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buf
 StatusBytes RadioSpiReadRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer) {
     static uint16_t tmpstatus;
 
-    StatusBytes* status=(StatusBytes*)&tmpstatus;
+    StatusBytes *status = (StatusBytes *) &tmpstatus;
     spirit1.lock();
     spirit1ChipSelect = 0;
 
@@ -96,7 +100,7 @@ StatusBytes RadioSpiReadRegisters(uint8_t address, uint8_t n_regs, uint8_t *buff
 StatusBytes RadioSpiCommandStrobes(uint8_t cmd_code) {
     static uint16_t tmpstatus;
 
-    StatusBytes* status=(StatusBytes*)&tmpstatus;
+    StatusBytes *status = (StatusBytes *) &tmpstatus;
 
     spirit1.lock();
     spirit1ChipSelect = 0;
@@ -109,11 +113,11 @@ StatusBytes RadioSpiCommandStrobes(uint8_t cmd_code) {
     return *status;
 }
 
-StatusBytes RadioSpiWriteFifo(uint8_t n_regs, uint8_t* buffer){
+StatusBytes RadioSpiWriteFifo(uint8_t n_regs, uint8_t *buffer) {
 
     static uint16_t tmpstatus;
 
-    StatusBytes* status=(StatusBytes*)&tmpstatus;
+    StatusBytes *status = (StatusBytes *) &tmpstatus;
 
     spirit1.lock();
     spirit1ChipSelect = 0;
@@ -123,7 +127,7 @@ StatusBytes RadioSpiWriteFifo(uint8_t n_regs, uint8_t* buffer){
 //    printf("WRTE %04x=%x (%d)\r\n", address, status, n_regs);
     uint8_t response[n_regs];
     for (int i = 0; i < n_regs; i++) response[i] = (uint8_t) spirit1.write(buffer[i]);
-//    dbg_dump("WRTE", response, n_regs);
+    dbg_dump("WRITE", response, n_regs);
 
     spirit1ChipSelect = 1;
     spirit1.unlock();
@@ -131,10 +135,10 @@ StatusBytes RadioSpiWriteFifo(uint8_t n_regs, uint8_t* buffer){
     return *status;
 }
 
-StatusBytes RadioSpiReadFifo(uint8_t n_regs, uint8_t* buffer){
+StatusBytes RadioSpiReadFifo(uint8_t n_regs, uint8_t *buffer) {
     static uint16_t tmpstatus;
 
-    StatusBytes* status=(StatusBytes*)&tmpstatus;
+    StatusBytes *status = (StatusBytes *) &tmpstatus;
 
     spirit1.lock();
     spirit1ChipSelect = 0;
@@ -150,14 +154,11 @@ StatusBytes RadioSpiReadFifo(uint8_t n_regs, uint8_t* buffer){
 
     return *status;
 }
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 
-void SP1_Enter_Pers_RX_mode(void)
-{
-   SpiritRadioPersistenRx(S_ENABLE);
-   SpiritCmdStrobeRx();
-}
+/* ******************************************************************** */
 
-DigitalOut    led1(LED1);
+/*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 
 void led_thread(void const *args) {
     while (true) {
@@ -166,7 +167,7 @@ void led_thread(void const *args) {
     }
 }
 
-osThreadDef(led_thread,   osPriorityNormal, DEFAULT_STACK_SIZE);
+osThreadDef(led_thread, osPriorityNormal, DEFAULT_STACK_SIZE);
 
 int main() {
     osThreadCreate(osThread(led_thread), NULL);
@@ -189,27 +190,48 @@ int main() {
     // read all registers again to check they are correct
     SpiritSpiReadRegisters(0x00, 0xf2, regs);
     dbg_dump("CONFI", regs, 0xf2);
+// +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
     wait(1);
 
-    uint8_t buffer[96];
+    SpiritRadioSetXtalFrequency(50000000);
+    SpiritManagementWaVcoCalibration();
 
-printf("now persistent mode \n");
 //    SpiritTimerSetRxTimeoutMs();
-//    SP1_Enter_Pers_RX_mode();
+
+    SRadioInit xradio;
+    SpiritRadioGetInfo(&xradio);
+    printf("the radio config %x, %4x, %4x, %4x\r\n", xradio.cChannelNumber,
+           xradio.lFreqDev, xradio.lBandwidth, xradio.nChannelSpace);
+
 
     SET_INFINITE_RX_TIMEOUT();
-
     SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
-
-
 //    SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
 
 
     while (1) {
-        SpiritCmdStrobeRx();
 
-        SpiritSpiReadLinearFifo(96, buffer);
+        uint8_t num = 6;
+        uint8_t tx_buff[num] = "HELLO";
+        SpiritSpiWriteLinearFifo(num, tx_buff);
+        SpiritPktBasicSetPayloadLength(num);
+        SpiritCmdStrobeTx();
+/* wait for the Tx Done IRQ. Here it just sets the
+tx_data_sent_flag to 1 */
+//        while(!tx_data_sent_flag);
+//        tx_data_sent_flag= 0;
+
+
+        SpiritCmdStrobeRx();
+//        while(!rx_data_received_flag);
+//        rx_data_received_flag= 0;
+        uint8_t N = SpiritLinearFifoReadNumElementsRxFifo();
+        if (N) {
+            uint8_t *buffer = (uint8_t *) malloc(N);
+            SpiritSpiReadLinearFifo(N, buffer);
+        }
+
         led1 = !led1;
         Thread::wait(2000);
     }
