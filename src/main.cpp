@@ -53,6 +53,65 @@ extern "C" {
 #define READ_HEADER     BUILT_HEADER(HEADER_ADDRESS_MASK, HEADER_READ_MASK)  /*!< macro to build the read header byte*/
 #define COMMAND_HEADER  BUILT_HEADER(HEADER_COMMAND_MASK, HEADER_WRITE_MASK) /*!< macro to build the command header byte*/
 
+#define POWER_DBM -5
+
+
+//+++++++++++++++++++
+//imported from example proj
+
+/*  Packet configuration parameters  */
+#define PREAMBLE_LENGTH             PKT_PREAMBLE_LENGTH_08BYTES
+#define SYNC_LENGTH                 PKT_SYNC_LENGTH_4BYTES
+#define SYNC_WORD                   0x88888888
+#define LENGTH_TYPE                 PKT_LENGTH_VAR
+#define LENGTH_WIDTH                8
+#define CRC_MODE                    PKT_CRC_MODE_8BITS
+#define CONTROL_LENGTH              PKT_CONTROL_LENGTH_0BYTES
+#define EN_ADDRESS                  S_DISABLE
+#define EN_FEC                      S_DISABLE
+#define EN_WHITENING                S_ENABLE
+
+/*  Addresses configuration parameters  */
+#define EN_FILT_MY_ADDRESS          S_DISABLE
+#define MY_ADDRESS                  0x00
+#define EN_FILT_MULTICAST_ADDRESS   S_DISABLE
+#define MULTICAST_ADDRESS           0xEE
+#define EN_FILT_BROADCAST_ADDRESS   S_DISABLE
+#define BROADCAST_ADDRESS           0xFF
+#define DESTINATION_ADDRESS         0x01
+
+/**
+* @brief Packet Basic structure fitting
+*/
+PktBasicInit xBasicInit={
+        PREAMBLE_LENGTH,
+        SYNC_LENGTH,
+        SYNC_WORD,
+        LENGTH_TYPE,
+        LENGTH_WIDTH,
+        CRC_MODE,
+        CONTROL_LENGTH,
+        EN_ADDRESS,
+        EN_FEC,
+        EN_WHITENING
+};
+
+
+/**
+* @brief Address structure fitting
+*/
+PktBasicAddressesInit xAddressInit={
+        EN_FILT_MY_ADDRESS,
+        MY_ADDRESS,
+        EN_FILT_MULTICAST_ADDRESS,
+        MULTICAST_ADDRESS,
+        EN_FILT_BROADCAST_ADDRESS,
+        BROADCAST_ADDRESS
+};
+
+
+//++++++++++++++++++++++++++++++++++++++
+
 void SpiritBaseConfiguration(void);
 void SpiritVcoCalibration(void);
 
@@ -69,7 +128,7 @@ StatusBytes RadioSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buf
 //    printf("WRTE %04x=%x (%d)\r\n", address, status, n_regs);
     uint8_t response[n_regs];
     for (int i = 0; i < n_regs; i++) response[i] = (uint8_t) spirit1.write(buffer[i]);
-//    dbg_dump("WRTE", response, n_regs);
+    dbg_dump("WRTE", response, n_regs);
 
     spirit1ChipSelect = 1;
     spirit1.unlock();
@@ -160,6 +219,47 @@ StatusBytes RadioSpiReadFifo(uint8_t n_regs, uint8_t *buffer) {
 
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++*/
 
+
+/*  Radio configuration parameters  */
+#define XTAL_OFFSET_PPM             0
+
+#ifdef USE_VERY_LOW_BAND
+#define BASE_FREQUENCY              169.0e6
+#endif
+
+#ifdef USE_LOW_BAND
+#define BASE_FREQUENCY              315.0e6
+#endif
+
+#ifdef USE_MIDDLE_BAND
+#define BASE_FREQUENCY              433.0e6
+#endif
+
+//#ifdef USE_HIGH_BAND
+#define BASE_FREQUENCY              868.0e6
+//#endif
+
+#define CHANNEL_SPACE               20e3
+#define CHANNEL_NUMBER              0
+#define MODULATION_SELECT           FSK
+#define DATARATE                    38400
+#define FREQ_DEVIATION              20e3
+#define BANDWIDTH                   100E3
+
+#define POWER_DBM                   -5 /* max is 11.6 */
+
+
+SRadioInit xRadioInit = {
+        XTAL_OFFSET_PPM,
+        BASE_FREQUENCY,
+        CHANNEL_SPACE,
+        CHANNEL_NUMBER,
+        MODULATION_SELECT,
+        DATARATE,
+        FREQ_DEVIATION,
+        BANDWIDTH
+};
+
 void led_thread(void const *args) {
     while (true) {
         led1 = !led1;
@@ -168,6 +268,7 @@ void led_thread(void const *args) {
 }
 
 osThreadDef(led_thread, osPriorityNormal, DEFAULT_STACK_SIZE);
+
 
 int main() {
     osThreadCreate(osThread(led_thread), NULL);
@@ -195,27 +296,68 @@ int main() {
     wait(1);
 
     SpiritRadioSetXtalFrequency(50000000);
-    SpiritManagementWaVcoCalibration();
+    SpiritRadioInit(&xRadioInit);//    SpiritManagementWaVcoCalibration();
+
+//    /* Spirit Radio config */
+//    SpiritRadioInit(&xRadioInit);
+//
+//    /* Spirit Radio set power */
+    SpiritRadioSetPALeveldBm(7,POWER_DBM);
+    SpiritRadioSetPALevelMaxIndex(7);
+//
+//    /* Spirit Packet config */
+    SpiritPktBasicInit(&xBasicInit);
+    SpiritPktBasicAddressesInit(&xAddressInit);
+//
+//    /* Spirit IRQs enable */
+//    SpiritIrqDeInit(NULL);
+//    SpiritIrq(TX_DATA_SENT , S_ENABLE);
+//
+//    /* payload length config */
+//    SpiritPktBasicSetPayloadLength(20);
+//
+//    /* destination address.
+//    By default it is not used because address is disabled, see struct xAddressInit*/
+    SpiritPktBasicSetDestinationAddress(0x01);
+//
+//    /* IRQ registers blanking */
+//    SpiritIrqClearStatus();
+
+//    * fit the TX FIFO */
+//                 SpiritCmdStrobeFlushTxFifo();
+//    SpiritSpiWriteLinearFifo(20, vectcTxBuff);
+//
+//    /* send the TX command */
+//    SpiritCmdStrobeTx();
+
+//+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+    /* Spirit Radio set power */
+//    SpiritRadioSetPALeveldBm(7,POWER_DBM);
+//    SpiritRadioSetPALevelMaxIndex(7);
 
 //    SpiritTimerSetRxTimeoutMs();
 
     SRadioInit xradio;
     SpiritRadioGetInfo(&xradio);
-    printf("the radio config %x, %4x, %4x, %4x\r\n", xradio.cChannelNumber,
+    printf("the radio config %d, %4x, %4x, %4x\r\n", xradio.cChannelNumber,
            xradio.lFreqDev, xradio.lBandwidth, xradio.nChannelSpace);
 
 
-    SET_INFINITE_RX_TIMEOUT();
-    SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
+//    SET_INFINITE_RX_TIMEOUT();
+//    SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
 //    SpiritTimerSetRxTimeoutStopCondition(SQI_ABOVE_THRESHOLD);
 
+//    SpiritPktBasicSetDestinationAddress(0x01);
 
     while (1) {
 
-        uint8_t num = 6;
+        uint8_t num = 7;
         uint8_t tx_buff[num] = "HELLO";
-        SpiritSpiWriteLinearFifo(num, tx_buff);
         SpiritPktBasicSetPayloadLength(num);
+
+        SpiritCmdStrobeFlushTxFifo();
+        SpiritSpiWriteLinearFifo(num, tx_buff);
+
         SpiritCmdStrobeTx();
 /* wait for the Tx Done IRQ. Here it just sets the
 tx_data_sent_flag to 1 */
@@ -223,14 +365,14 @@ tx_data_sent_flag to 1 */
 //        tx_data_sent_flag= 0;
 
 
-        SpiritCmdStrobeRx();
+        // SpiritCmdStrobeRx();
 //        while(!rx_data_received_flag);
 //        rx_data_received_flag= 0;
-        uint8_t N = SpiritLinearFifoReadNumElementsRxFifo();
-        if (N) {
-            uint8_t *buffer = (uint8_t *) malloc(N);
-            SpiritSpiReadLinearFifo(N, buffer);
-        }
+        // uint8_t N = SpiritLinearFifoReadNumElementsRxFifo();
+        // if (N) {
+        //     uint8_t *buffer = (uint8_t *) malloc(N);
+        //     SpiritSpiReadLinearFifo(N, buffer);
+        // }
 
         led1 = !led1;
         Thread::wait(2000);
@@ -242,3 +384,5 @@ tx_data_sent_flag to 1 */
 
 //TODO put the device into ready state and red in blocking / non blocking mode
 //
+
+
