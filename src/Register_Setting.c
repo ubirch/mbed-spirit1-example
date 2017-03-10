@@ -1,10 +1,8 @@
 #include <stdint.h>
-#include <Inc/MCU_Interface.h>
-#include "../SPIRIT1_Library/Inc/MCU_Interface.h"
 
-//uint16_t SpiritSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer);
-//uint16_t SpiritSpiReadRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer);
-//uint16_t SpiritSpiCommandStrobes(uint8_t cmd_code);
+uint16_t SpiritSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer);
+uint16_t SpiritSpiReadRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer);
+uint16_t SpiritSpiCommandStrobes(uint8_t cmd_code);
 
 /**
 
@@ -40,7 +38,7 @@ These functions must be called in the following order:
 #define    COMMAND_FLUSHTXFIFO                                 ((uint8_t)(0x72)) /*!< Clean the TX FIFO; valid from all states */
 
 
-/* This is the function that initializes the SPIRIT with the configuration
+/* This is the function that initializes the SPIRIT with the configuration 
 that the user has exported using the GUI */
 void SpiritBaseConfiguration(void) {
     uint8_t tmp[7];
