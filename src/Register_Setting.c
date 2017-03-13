@@ -1,8 +1,9 @@
 #include <stdint.h>
+#include "MCU_Interface.h"
 
-uint16_t SpiritSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer);
-uint16_t SpiritSpiReadRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer);
-uint16_t SpiritSpiCommandStrobes(uint8_t cmd_code);
+//uint16_t SpiritSpiWriteRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer);
+//uint16_t SpiritSpiReadRegisters(uint8_t address, uint8_t n_regs, uint8_t *buffer);
+//uint16_t SpiritSpiCommandStrobes(uint8_t cmd_code);
 
 /**
 
@@ -188,4 +189,3 @@ void SpiritVcoCalibration(void) {
     SpiritSpiWriteRegisters(0x6E, 2, cal_words); /* write both calibration words */
 
 }
-
