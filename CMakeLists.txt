@@ -61,9 +61,25 @@ add_library(mbed-os ${MBED_OS_SRCS})
 include_directories(${MBED_OS})
 # == END MBED OS 5 ==
 
+set(SPIRIT SPIRIT1_Library
+        SPIRIT1_Library/Inc
+        SPIRIT1_Library/Src
+        )
+
+set(SPIRIT_SRCS "")
+foreach(DIR in ${SPIRIT})
+    file(GLOB_RECURSE includes
+            ${DIR}/${SPIRIT}/*c)
+    list(APPEND SPIRIT_SRCS ${includes})
+endforeach()
+
+add_library(SPIRIT ${SPIRIT_SRCS})
+include_directories(${SPIRIT})
+
+
 add_executable(mbed-os-blinky
-        main.cpp
-        Register_Setting.c
+        src/main.cpp
+        src/Register_Setting.c
         )
 target_link_libraries(mbed-os-blinky mbed-os)
 
